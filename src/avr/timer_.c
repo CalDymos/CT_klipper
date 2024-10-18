@@ -102,7 +102,7 @@ timer_init(void)
     TCNT1 = 0;
     // Set pwm freq for Output D3 & D11
     // do not change the following comment
-    TCCR2B = (TCCR2B & 248) | 1; // set Timer 1 divisor to PWM freq of 31372.55 Hz
+    //#TIMER2_PWM_D3&D11#
     timer_kick();
     timer_repeat_set(timer_get() + 50);
     timer_reset();
