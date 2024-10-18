@@ -60,19 +60,19 @@ def parse_gcmd_pair(gcmd, name, minval=None, maxval=None):
     try:
         pair = [int(v.strip()) for v in gcmd.get(name).split(',')]
     except:
-        raise gcmd.error("""{"code":"key248", "msg":"Unable to parse parameter '%s'", "values":["%s"]}""" % (name, name))
+        raise gcmd.error("Unable to parse parameter '%s'" % (name,))
     if len(pair) != 2:
         if len(pair) != 1:
-            raise gcmd.error("""{"code":"key248", "msg":"Unable to parse parameter '%s'", "values":["%s"]}""" % (name, name))
+            raise gcmd.error("Unable to parse parameter '%s'" % (name,))
         pair = (pair[0], pair[0])
     if minval is not None:
         if pair[0] < minval or pair[1] < minval:
-            raise gcmd.error("""{"code":"key249", "msg":"Parameter '%s' must have a minimum of %d", "values":["%s", %d]}"""
-                             % (name, minval, name, minval))
+            raise gcmd.error("Parameter '%s' must have a minimum of %d"
+                             % (name, minval))
     if maxval is not None:
         if pair[0] > maxval or pair[1] > maxval:
-            raise gcmd.error("""{"code":"key250", "msg":"Parameter '%s' must have a maximum of %d", "values":["%s", %d]}"""
-                             % (name, maxval, name, maxval))
+            raise gcmd.error("Parameter '%s' must have a maximum of %d"
+                             % (name, maxval))
     return pair
 
 # retreive commma separated coordinate from a g-code command
@@ -80,7 +80,7 @@ def parse_gcmd_coord(gcmd, name):
     try:
         v1, v2 = [float(v.strip()) for v in gcmd.get(name).split(',')]
     except:
-        raise gcmd.error("""{"code":"key248", "msg":"Unable to parse parameter '%s'", "values":["%s"]}""" % (name, name))
+        raise gcmd.error("Unable to parse parameter '%s'" % (name,))
     return v1, v2
 
 
@@ -93,6 +93,7 @@ class BedMesh:
         self.last_position = [0., 0., 0., 0.]
         self.bmc = BedMeshCalibrate(config, self)
         self.z_mesh = None
+        self.z_mesh_bak = None
         self.toolhead = None
         self.horizontal_move_z = config.getfloat('horizontal_move_z', 5.)
         self.fade_start = config.getfloat('fade_start', 1.)
@@ -121,6 +122,12 @@ class BedMesh:
         self.gcode.register_command(
             'BED_MESH_OFFSET', self.cmd_BED_MESH_OFFSET,
             desc=self.cmd_BED_MESH_OFFSET_help)
+        self.gcode.register_command(
+            'BED_MESH_SAVE', self.cmd_BED_MESH_SAVE,
+            desc=self.cmd_BED_MESH_SAVE_help)
+        self.gcode.register_command(
+            'BED_MESH_RESTORE', self.cmd_BED_MESH_RESTORE,
+            desc=self.cmd_BED_MESH_RESTORE_help)
         # Register transform
         gcode_move = self.printer.load_object(config, 'gcode_move')
         gcode_move.set_move_transform(self)
@@ -145,15 +152,18 @@ class BedMesh:
                     self.z_mesh = None
                     self.fade_target = 0.
                     raise self.gcode.error(
-                        """{"code":"key233", "msg":"bed_mesh: ERROR, fade_target lies outside of mesh z range\nmin: %.4f, max: %.4f, fade_target: %.4f", "values": [%.4f, %.4f, %.4f]}"""
-                        % (min_z, max_z, err_target, min_z, max_z, err_target))
+                        "bed_mesh: ERROR, fade_target lies outside of mesh z "
+                        "range\nmin: %.4f, max: %.4f, fade_target: %.4f"
+                        % (min_z, max_z, err_target))
             min_z, max_z = mesh.get_z_range()
             if self.fade_dist <= max(abs(min_z), abs(max_z)):
                 self.z_mesh = None
                 self.fade_target = 0.
                 raise self.gcode.error(
-                    """{"code":"key234", "msg":"bed_mesh:  Mesh extends outside of the fade range,  please see the fade_start and fade_end options in example-extras.cfg. fade distance: %.2f mesh min: %.4f  mesh max: %.4f", "values": [%.2f, %.4f, %.4f]}""" % (
-                        self.fade_dist, min_z, max_z, self.fade_dist, min_z, max_z))
+                    "bed_mesh:  Mesh extends outside of the fade range, "
+                    "please see the fade_start and fade_end options in"
+                    "example-extras.cfg. fade distance: %.2f mesh min: %.4f"
+                    "mesh max: %.4f" % (self.fade_dist, min_z, max_z))
         else:
             self.fade_target = 0.
         self.z_mesh = mesh
@@ -164,7 +174,7 @@ class BedMesh:
         self.update_status()
     def get_z_factor(self, z_pos):
         if z_pos >= self.fade_end:
-            return 0.0
+            return 0.
         elif z_pos >= self.fade_start:
             return (self.fade_end - z_pos) / self.fade_dist
         else:
@@ -213,7 +223,7 @@ class BedMesh:
                     self.toolhead.move(split_move, speed)
                 else:
                     raise self.gcode.error(
-                        """{"code":"key235", "msg":"Mesh Leveling: Error splitting move ", "values": []}""")
+                        "Mesh Leveling: Error splitting move ")
         self.last_position[:] = newpos
     def get_status(self, eventtime=None):
         return self.status
@@ -245,7 +255,7 @@ class BedMesh:
             # Print Generated Points instead of mesh
             self.bmc.print_generated_points(gcmd.respond_info)
         elif self.z_mesh is None:
-            gcmd.respond_info("""{"code":"key236", "msg":"Bed has not been probed", "values": []}""")
+            gcmd.respond_info("Bed has not been probed")
         else:
             self.z_mesh.print_probed_matrix(gcmd.respond_info)
             self.z_mesh.print_mesh(gcmd.respond_raw, self.horizontal_move_z)
@@ -259,7 +269,7 @@ class BedMesh:
                 'z_positions': self.z_mesh.get_probed_matrix()}
             gcmd.respond_raw("mesh_map_output " + json.dumps(outdict))
         else:
-            gcmd.respond_info("""{"code":"key236", "msg":"Bed has not been probed", "values": []}""")
+            gcmd.respond_info("Bed has not been probed")
     cmd_BED_MESH_CLEAR_help = "Clear the Mesh so no z-adjustment is made"
     def cmd_BED_MESH_CLEAR(self, gcmd):
         self.set_mesh(None)
@@ -273,8 +283,14 @@ class BedMesh:
             gcode_move = self.printer.lookup_object('gcode_move')
             gcode_move.reset_last_position()
         else:
-            gcmd.respond_info("""{"code":"key237", "msg":"No mesh loaded to offset", "values": []}""")
-
+            gcmd.respond_info("No mesh loaded to offset")
+    cmd_BED_MESH_SAVE_help = "Save the Mesh to bak"
+    def cmd_BED_MESH_SAVE(self, gcmd):
+        if self.z_mesh is not None:
+            self.z_mesh_bak = self.z_mesh
+    cmd_BED_MESH_RESTORE_help = "Restore the bak Mesh to Mesh"
+    def cmd_BED_MESH_RESTORE(self, gcmd):
+        self.set_mesh(self.z_mesh_bak)
 
 class BedMeshCalibrate:
     ALGOS = ['lagrange', 'bicubic']
@@ -302,6 +318,33 @@ class BedMeshCalibrate:
         self.gcode.register_command(
             'BED_MESH_CALIBRATE', self.cmd_BED_MESH_CALIBRATE,
             desc=self.cmd_BED_MESH_CALIBRATE_help)
+
+        if "BED_MESH_SET_DISABLE" not in self.gcode.ready_gcode_handlers:
+            self.gcode.register_command(
+                'BED_MESH_SET_DISABLE', self.cmd_BED_MESH_SET_DISABLE,
+                desc=self.cmd_BED_MESH_SET_DISABLE_helper)
+        if "BED_MESH_SET_ENABLE" not in self.gcode.ready_gcode_handlers:
+            self.gcode.register_command(
+                'BED_MESH_SET_ENABLE', self.cmd_BED_MESH_SET_ENABLE,
+                desc=self.cmd_BED_MESH_SET_ENABLE_helper)
+
+    def cmd_BED_MESH_SET_DISABLE(self, gcmd):
+        try:
+            if self.bedmesh and self.bedmesh.z_mesh:
+                self.bedmesh.z_mesh.isenable = False
+        except:
+            pass
+        # self.gcode.respond_info("BED_MESH_SET_DISABLE: set isenable=%s id=%s" % (self.bedmesh.z_mesh.isenable, id(self.bedmesh.z_mesh)))
+    cmd_BED_MESH_SET_DISABLE_helper = " set MESH disable"
+    def cmd_BED_MESH_SET_ENABLE(self, gcmd):
+        try:
+            if self.bedmesh and self.bedmesh.z_mesh:
+                self.bedmesh.z_mesh.isenable = True
+        except:
+            pass
+        # self.gcode.respond_info("BED_MESH_SET_ENABLE: set isenable=%s id=%s" % (self.bedmesh.z_mesh.isenable, id(self.bedmesh.z_mesh)))
+    cmd_BED_MESH_SET_ENABLE_helper = "set MESH enable "
+
     def _generate_points(self, error):
         x_cnt = self.mesh_config['x_count']
         y_cnt = self.mesh_config['y_count']
@@ -312,13 +355,13 @@ class BedMeshCalibrate:
         # floor distances down to next hundredth
         x_dist = math.floor(x_dist * 100) / 100
         y_dist = math.floor(y_dist * 100) / 100
-        if x_dist <= 1. or y_dist <= 1.:
+        if x_dist < 1. or y_dist < 1.:
             raise error("""{"code":"key43", "msg":"bed_mesh: min/max points too close together", "values": []}""")
 
         if self.radius is not None:
             # round bed, min/max needs to be recalculated
             y_dist = x_dist
-            new_r = (x_cnt / 2) * x_dist
+            new_r = (x_cnt // 2) * x_dist
             min_x = min_y = -new_r
             max_x = max_y = new_r
         else:
@@ -381,7 +424,8 @@ class BedMeshCalibrate:
                     if dist_from_origin <= self.radius:
                         valid_coords.append(ac)
             if not valid_coords:
-                raise error("""{"code":"key238", "msg":"bed_mesh: Unable to generate coordinates for faulty region at index: %d", "values": [%d]}""" % (i, i))
+                raise error("bed_mesh: Unable to generate coordinates"
+                            " for faulty region at index: %d" % (i))
             self.substituted_indices[i] = valid_coords
     def print_generated_points(self, print_func):
         x_offset = y_offset = 0.
@@ -416,7 +460,7 @@ class BedMeshCalibrate:
             # round beds must have an odd number of points along each axis
             if not x_cnt & 1:
                 raise config.error(
-                    '{"code": "key13", "msg": "bed_mesh: probe_count must be odd for round beds"}')
+                    """{"code": "key13", "msg": "bed_mesh: probe_count must be odd for round beds"}""")
             # radius may have precision to .1mm
             self.radius = math.floor(self.radius * 10) / 10
             orig_cfg['radius'] = self.radius
@@ -429,7 +473,7 @@ class BedMeshCalibrate:
             min_x, min_y = config.getfloatlist('mesh_min', count=2)
             max_x, max_y = config.getfloatlist('mesh_max', count=2)
             if max_x <= min_x or max_y <= min_y:
-                raise config.error("""{"code":"key44", "msg":"bed_mesh: invalid min/max points", "values": []}""")
+                raise config.error('bed_mesh: invalid min/max points')
         orig_cfg['x_count'] = mesh_cfg['x_count'] = x_cnt
         orig_cfg['y_count'] = mesh_cfg['y_count'] = y_cnt
         orig_cfg['mesh_min'] = self.mesh_min = (min_x, min_y)
@@ -706,7 +750,7 @@ class BedMeshCalibrate:
         for row in probed_matrix:
             if len(row) != x_cnt:
                 raise self.gcode.error(
-                    ("""{"code":"key50", "msg":"bed_mesh: invalid x-axis table length\nProbed table length: %d Probed Table:\n%s", "values": [%d, "%s"]}""") %
+                    """{"code":"key50", "msg":"bed_mesh: invalid x-axis table length\nProbed table length: %d Probed Table:\n%s", "values": [%d, "%s"]}""" %
                     (len(probed_matrix), str(probed_matrix), len(probed_matrix), str(probed_matrix)))
 
         z_mesh = ZMesh(params,self.printer)
@@ -768,7 +812,7 @@ class MoveSplitter:
         t = distance_from_prev / self.total_move_length
         if t > 1. or t < 0.:
             raise self.gcode.error(
-                '{"code": "key14", "msg": "bed_mesh: Slice distance is negative or greater than entire move length"}')
+                """{"code": "key14", "msg": "bed_mesh: Slice distance is negative or greater than entire move length"}""")
         for i in range(4):
             if self.axis_move[i]:
                 self.current_pos[i] = lerp(
@@ -801,7 +845,7 @@ class MoveSplitter:
 
 
 class ZMesh:
-    def __init__(self, params,printer):
+    def __init__(self, params, printer):
         self.printer = printer
         self.isenable = True
         self.probed_matrix = self.mesh_matrix = None
@@ -842,14 +886,14 @@ class ZMesh:
         self.mesh_y_dist = (self.mesh_y_max - self.mesh_y_min) / \
                            (self.mesh_y_count - 1)
         self.gcode = self.printer.lookup_object('gcode')
-        if "BED_MESH_SET_DISABLE" not in self.gcode.ready_gcode_handlers:
-            self.gcode.register_command(
-                'BED_MESH_SET_DISABLE', self.cmd_BED_MESH_SET_DISABLE,
-                desc=self.cmd_BED_MESH_SET_DISABLE_helper)
-        if "BED_MESH_SET_ENABLE" not in self.gcode.ready_gcode_handlers:
-            self.gcode.register_command(
-                'BED_MESH_SET_ENABLE', self.cmd_BED_MESH_SET_ENABLE,
-                desc=self.cmd_BED_MESH_SET_ENABLE_helper)
+        # if "BED_MESH_SET_DISABLE" not in self.gcode.ready_gcode_handlers:
+        #     self.gcode.register_command(
+        #         'BED_MESH_SET_DISABLE', self.cmd_BED_MESH_SET_DISABLE,
+        #         desc=self.cmd_BED_MESH_SET_DISABLE_helper)
+        # if "BED_MESH_SET_ENABLE" not in self.gcode.ready_gcode_handlers:
+        #     self.gcode.register_command(
+        #         'BED_MESH_SET_ENABLE', self.cmd_BED_MESH_SET_ENABLE,
+        #         desc=self.cmd_BED_MESH_SET_ENABLE_helper)
     def get_mesh_matrix(self):
         if self.mesh_matrix is not None:
             return [[round(z, 6) for z in line]
@@ -912,12 +956,12 @@ class ZMesh:
     def get_y_coordinate(self, index):
         return self.mesh_y_min + self.mesh_y_dist * index
 
-    def cmd_BED_MESH_SET_DISABLE(self, gcmd):
-        self.isenable = False
-    cmd_BED_MESH_SET_DISABLE_helper = " set  MESH disable"
-    def cmd_BED_MESH_SET_ENABLE(self, gcmd):
-        self.isenable = True
-    cmd_BED_MESH_SET_ENABLE_helper = "set  MESH enable "
+    # def cmd_BED_MESH_SET_DISABLE(self, gcmd):
+    #     self.isenable = False
+    # cmd_BED_MESH_SET_DISABLE_helper = " set  MESH disable"
+    # def cmd_BED_MESH_SET_ENABLE(self, gcmd):
+    #     self.isenable = True
+    # cmd_BED_MESH_SET_ENABLE_helper = "set  MESH enable "
     def calc_z(self, x, y):
         if self.isenable:
             if self.mesh_matrix is not None:
@@ -928,8 +972,8 @@ class ZMesh:
                 z1 = lerp(tx, tbl[yidx+1][xidx], tbl[yidx+1][xidx+1])
                 return lerp(ty, z0, z1)
             else:
-                pass
                 # No mesh table generated, no z-adjustment
+                pass
         return 0.
     def get_z_range(self):
         if self.mesh_matrix is not None:
@@ -1065,7 +1109,7 @@ class ZMesh:
                     break
             if not found:
                 raise BedMeshError(
-                    """{"code":"key51", "msg":"bed_mesh: Error finding x control points", "values": []}""")
+                    "bed_mesh: Error finding x control points")
         return p0, p1, p2, p3, t
     def _get_y_ctl_pts(self, x, y):
         # Fetch control points and t for a Y value in the mesh
@@ -1095,7 +1139,7 @@ class ZMesh:
                     break
             if not found:
                 raise BedMeshError(
-                    """{"code":"key241", "msg":"bed_mesh: Error finding y control points", "values": []}""")
+                    """{"code":"key51", "msg":"bed_mesh: Error finding x control points", "values": []}""")
         return p0, p1, p2, p3, t
     def _cardinal_spline(self, p, tension):
         t = p[4]
@@ -1188,6 +1232,8 @@ class ProfileManager:
             z_values = z_values[:-2]
         configfile.set(cfg_name, 'version', PROFILE_VERSION)
         configfile.set(cfg_name, 'points', z_values)
+        from .tool import reportInformation
+        reportInformation("key606,", {"points": z_values})
         for key, value in mesh_params.items():
             configfile.set(cfg_name, key, value)
         # save copy in local storage
@@ -1207,11 +1253,13 @@ class ProfileManager:
     def load_profile(self, prof_name):
         profile = self.profiles.get(prof_name, None)
         if profile is None:
+            if "default" == prof_name:
+                return
             raise self.gcode.error(
                 """{"code":"key52", "msg":"bed_mesh: Unknown profile [%s]", "values": ["%s"]}""" % (prof_name, prof_name))
         probed_matrix = profile['points']
         mesh_params = profile['mesh_params']
-        z_mesh = ZMesh(mesh_params,self.printer)
+        z_mesh = ZMesh(mesh_params, self.printer)
         try:
             z_mesh.build_mesh(probed_matrix)
         except BedMeshError as e:

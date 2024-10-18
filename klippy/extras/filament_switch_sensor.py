@@ -51,6 +51,8 @@ class RunoutHelper:
             pause_prefix = "PAUSE\n"
             self.printer.get_reactor().pause(eventtime + self.pause_delay)
         self._exec_gcode(pause_prefix, self.runout_gcode)
+        from extras.tool import reportInformation
+        reportInformation("key605,")
     def _insert_event_handler(self, eventtime):
         self._exec_gcode("", self.insert_gcode)
     def _exec_gcode(self, prefix, template):
